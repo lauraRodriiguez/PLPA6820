@@ -1,5 +1,5 @@
 
-#Introduction to visualization in R
+#Introduction to visualization in R.
 #Laura Rodriguez
 
 MycotoxinData <- read.csv("/Users/lau/Desktop/PLPA6820/2023.02.26Gittor/MycotoxinData.csv", na.strings = "na")
