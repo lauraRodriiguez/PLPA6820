@@ -84,15 +84,15 @@ ggplot(MycotoxinData, aes(x = Treatment , y = DON, fill = Cultivar))+
 #Question 10
 ggplot(MycotoxinData, aes(x = Treatment , y = DON, fill = Cultivar))+
   stat_summary(fun=mean, geom = "bar")+
-  stat_summary(fun=mean, geom = "line")+
   stat_summary(fun.data = mean_se, geom = "errorbar")+
   ylab("DON (ppm)")+
   xlab("")+
-  geom_point(position = position_jitterdodge(),shape = 25, color = "grey")+
+  geom_point(position = position_jitterdodge(),shape = 25, color = "black", alpha = 0.5)+
   scale_fill_manual(values = c("#F0E442","#009E73"))+
   facet_wrap(~Cultivar)+
-  theme_classic()+
-  geom_jitter(alpha = 0.5)
+  theme_classic()
+#what geom_jitter does is add dots, basically same as geom_point so having them both has creating a circles and shape were created with the geom_point.
+  #geom_jitter(alpha = 0.5)
 
 
 
