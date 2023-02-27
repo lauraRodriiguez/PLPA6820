@@ -3,7 +3,7 @@
 #PLPA6820
 #Introduction to R programming
 #assignment:.
-#4 question
+#4 question.
 z <- c(1:200)
 mean(z)
 sd(z)
