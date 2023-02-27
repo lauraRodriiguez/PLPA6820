@@ -1,2 +1,2 @@
 # PLPA6820
-class
+class : Principles and techniques of reproducible science
