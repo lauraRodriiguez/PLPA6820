@@ -1,6 +1,6 @@
 
 #PLPA6820
-#Introduction to R
+#Introduction to R programming
 #assignment:
 #4 question
 z <- c(1:200)
