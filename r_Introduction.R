@@ -1,7 +1,7 @@
 
 #PLPA6820
 #Introduction to R programming
-#assignment:
+#assignment:.
 #4 question
 z <- c(1:200)
 mean(z)

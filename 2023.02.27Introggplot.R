@@ -8,6 +8,11 @@ library("ggplot2")
 library(tidyverse)
 cbbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
 
+
+str(MycotoxinData)
+
+#if you deleted a file you need to pull bc is out of sync. Once you pull then you can push you data
+
 #Question 2
 ggplot(MycotoxinData, aes(x = Treatment , y = DON, color = Cultivar ))+
   geom_boxplot()+
