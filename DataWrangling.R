@@ -1,13 +1,6 @@
----
-title: "DataWrangling"
-author: "laura"
-date: '2023-03-23'
-output:
-  word_document: default
-  html_document: default
----
 
-```{r setup, include=FALSE}
+
+
 library(ggplot2)
 library(dplyr)
 library(tidyverse)
@@ -37,44 +30,46 @@ microbiome.fungi2 <- select(microbiome.fungi,
                             Genus, 
                             Species, 
                             Taxonomy)
-```
-#Q2
-```{r}
+#Q2. Calculate the mean percent relative abundance (*100) across all OTUs by compartment using the pipe operator.
+
+#rewrites but only with the new percent column
 microbiome.fungi2 %>%
   group_by(OTU, Compartment) %>%
   mutate(Percent = Abundance*100) %>%
   summarize(Mean = mean(Percent))%>%
   head()
+  
 
-```
-#Q3
-```{r}
+  
+#Q3. Calculate the mean percent relative abundance across all OTUs by compartment and fungicide using the pipe operator. 
+#I suppose we filter or subset and then do the mutate.Since above we did the mean percent relative abundance we only have to subset only compartment and fungicide.
 microbiome.fungi2 %>%
   group_by(OTU, Compartment, Fungicide) %>%
   mutate(Percent = Abundance*100)%>%
   summarize(Mean = mean(Percent))%>%
   head()
-```
-#Q4
-```{r}
+
+
+#Q4. Restrict the previous analysis to just the fungal class Dothideomycetes.
+
 microbiome.fungi2 %>%
   filter(Class == "Dothideomycetes") %>%
   group_by(OTU, Compartment, Fungicide, Class) %>%
   mutate(Percent = Abundance*100)%>%
   summarize(Mean = mean(Percent))%>%
   head()
-```
-#Q5
-```{r}
+
+   
+#Q5. Now do the same analysis but for Orders in the genus Dothideomycetes.
 microbiome.fungi2 %>%
   filter(Class == "Dothideomycetes") %>%
   group_by(OTU, Compartment, Fungicide, Order) %>%
   mutate(Percent = Abundance*100)%>%
   summarize(Mean = mean(Percent))%>%
   head()
-```
-#Q6
-```{r}
+
+#Q6. Calculate the standard error for each mean in Q5.
+#now the question is can i do this with out having to do the abundance?
 microbiome.fungi2 %>%
   filter(Order == "Pleosporales") %>%
   group_by(OTU, Compartment, Fungicide, Order) %>%
@@ -83,20 +78,21 @@ microbiome.fungi2 %>%
             n = n(), 
             sd.dev = sd(Percent)) %>%
   mutate(std.err = sd.dev/sqrt(n))
-```
-#Q7
-```{r}
+
+
+#Q7. Select the columns Order, Compartment, Fungicide and Mean from the output 
+# of Q6 and Pivot the dataset to wide format so you have Compartment as column headers
 microbiome.fungi2 %>%
   filter(Class == "Dothideomycetes") %>%
   group_by(Order, Compartment, Fungicide) %>%
-  mutate(Percent = Abundance*100) %>%  
+  mutate(Percent = Abundance*100) %>%  #do i have to do this ??
   summarise(Mean = mean(Percent)) %>%
   pivot_wider(names_from = Compartment, values_from = Mean) %>%
   head()
-```
+
+
 #we dont have mean bc the pivot wider is not called mean is called root/leaf
-#Q8
-```{r}
+#Q8. Recreate this plot using your dataset in Q7. 
 microbiome.fungi2 %>%
   filter(Class == "Dothideomycetes") %>%
   group_by(Order, Compartment, Fungicide) %>%
@@ -114,7 +110,6 @@ microbiome.fungi2 %>%
   #scale_fill_manual(values = cbbPalette)+
   #facet_wrap(~Fungicide)
 
-```
 
 
 
