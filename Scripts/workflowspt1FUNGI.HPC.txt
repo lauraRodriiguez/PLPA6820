@@ -1,0 +1,164 @@
+# STEP 1 - STRIPPING PRIMERS
+
+#!/bin/bash -login
+
+############################################
+#     Bioinformatic pipeline     		   #
+#     ITS amplicon sequences	           #
+#		  PRIMER REMOVAL 				   #
+############################################
+
+# running cutadapt in a loop 
+
+# first need to generate a list of file names in a text file named samples.txt
+#to be able to make add the names of the files inside the text file (samples.txt) need to be inside the directory of where the samples are and then make the "ls > samples.txt" and the names of all the samples should appear. If you do it outside of the directory where the samples are located need to add the path and then the carrot and the name of the text file. Example: ls path_to_where_the-samples_are_at > samples.txt. After doing this enter to the samples.txt using nano and erase anything that is not the names of the samples you are about to run, in my case I only erase the "sample.txt" found inside the samples.txt (it depends on what you have in that directory too).
+# I did this by ls > samples.txt, then going to nano samples.txt to take out samples.txt
+
+#!/bin/bash
+#
+# load the module
+module load anaconda/2-4.2.0_cent
+for sample in $(cat samples.txt)
+do
+
+    echo "On sample: $sample"
+    
+    cutadapt -a -g CTTGGTCATTTAGAGGAAGTAA \
+    -e 0.01 --discard-untrimmed --match-read-wildcards \
+    -o ${sample}*.fastq.gz \
+    ${sample} \
+    >> cutadapt_primer_trimming_stats.txt 2>&1
+
+done
+
+# STEP 2 - GET STATS ON WHERE TO TRIM SEQUENCES WITH VSEARCH
+
+#!/bin/bash -login
+
+############################################
+#     Bioinformatic pipeline     		   #
+#     ITS amplicon sequences	           #
+#		  	STATS  				   		   #
+############################################
+
+# Usually just trim at 250 bp and maxee 1.0
+
+cat *.fq.gz > trimmed_combined.fastq.gz
+gunzip trimmed_combined.fastq.gz
+
+module load vsearch
+
+
+
+# STEP 3 - FILTERING AND TRIMMING 
+vsearch -fastq_filter trimmed_combined.fastq -fastq_maxee 1.0 -fastq_trunclen 250 -fastq_maxns 0 -fastaout filtered_R1.fasta -fastqout filtered_R1.fastq
+vsearch -fastq_filter filtered_R1.fastq -fastq_stripleft 44 -fastaout trimmed_R1.fasta -fastqout trimmed_R1.fastq
+module load fastqc
+fastqc trimmed_R1.fastq
+
+ 
+
+
+#!/bin/bash -login
+
+# STEP 4 - DEREPLICATION, CLUSTERING, CHIMERA REMOVAL
+
+############################################
+#     Bioinformatic pipeline     		   #
+#     ITS amplicon sequences	           #
+#DEREPLICATION, CLUSTERING, CHIMERA REMOVAL#
+############################################
+
+#HAVE TO INSTALL USEARCH BEFORE USING#
+
+module load vsearch
+
+# Read 1
+
+# dereplication 
+vsearch --derep_fulllength /home/aublxr001/p.soil_fungi/trimmedseq/trimmed_R1.fasta --output /home/aublxr001/p.soil_fungi/clustered/uniques_R1.fasta -sizeout
+
+# de-noising (error correction), output is zero-radius OTUs (puede variable el % dependiendo de cuantas replicas haya es que decide anadirlo o no)
+usearch -unoise3 /home/aublxr001/p.soil_fungi/clustered/uniques_R1.fasta -tabbedout /home/aublxr001/p.soil_fungi/clustered/unoise_zotus_R1.txt -zotus /home/aublxr001/p.soil_fungi/clustered/zotus_R1.fasta
+
+# clusters OTUs based on traditional 97% identity (corre con solo 97%)
+usearch -cluster_otus /home/aublxr001/p.soil_fungi/clustered/uniques_R1.fasta -minsize 2 -otus /home/aublxr001/p.soil_fungi/clustered/otus_R1.fasta -uparseout /home/aublxr001/p.soil_fungi/clustered/uparse_otus_R1.txt -relabel FOTU_ --threads 20
+
+# useful links
+#http://www.drive5.com/usearch/manual/unoise_pipeline.html
+#http://www.drive5.com/usearch/manual/faq_uparse_or_unoise.html
+#http://www.drive5.com/usearch/manual/cmd_otutab.html
+#http://www.drive5.com/usearch/manual/upp_labels_sample.html
+#http://drive5.com/usearch/manual/bugs.html
+#http://drive5.com/usearch/manual/support.html
+
+
+
+
+#!/bin/bash -login
+
+# STEP 5 - MAPPING
+
+############################################
+#     Bioinformatic pipeline                #
+#     ITS amplicon sequences               #
+#            MAPPING                        #
+############################################
+
+# First use seqtk to convert all the demultiplexed samples into fasta on a loop.
+# Use samples.txt like we did for cutadapt
+
+# Load the modules
+module load gcc/11.2.0
+module load seqtk/1.3-olt7cls
+
+for sample in $(cat /home/aublxr001/p.soil_fungi/cutadapt/samples.txt)
+do
+
+    echo "On sample: $sample"
+    seqtk seq -a ${sample} > ${sample}.fasta
+
+     # have to replace the beginning of the fasta headers with the file name for mapping. Otherwise we get one sample with all the read counts, which is not what we want.
+    # We use awk to append the filename at the beginning of each fasta sequence after the >, then we pipe it to sed to replace the underscore with a period.
+
+    awk '/>/{sub(">","&"FILENAME":");sub(/\.fasta/,x)}1' ${sample}.fasta | sed '/^>/s/_/\ /g' > ${sample}_new.fasta
+
+done
+
+# have to create one file containing all the reads from the demultiplexed reads
+cat *_new.fasta > demultiplexed_new.fasta
+
+# Taking out the /output/demultiplexed/ text from the beginning of the sample names - probably a better way to run this, but it works. 
+#sed 's/[/home/aublxr001/p.soil_fungi/Demultiplexed/]//g' /home/aublxr001/p.soil_fungi/Demultiplexed/demultiplexed_new.fasta > /home/aublxr001/p.soil_fungi/Demultiplexed/#demultiplexed_new2.fasta
+
+# align the demultiplexed reads back to the now clustered OTUs or ZOTUs (ESV)
+module load vsearch
+vsearch -usearch_global /home/aublxr001/p.soil_fungi/Demultiplexed/demultiplexed_new.fasta -db /home/aublxr001/p.soil_fungi/clustered/otus_R1.fasta -strand plus -id 0.97 -otutabout otu_table_ITS_UNOISE_R1.txt
+
+
+
+
+#!/bin/bash -login
+
+# STEP 6 - TAXONOMY
+
+##################################
+#     Bioinformatic pipeline     #
+#     ITS FUNGI 				 #
+#     ----------------------     #
+#     taxonomy assignment	 	 #
+##################################
+
+module load vsearch 
+
+
+# Assign taxonomy using SINTAX algorithm
+vsearch -sintax /home/aublxr001/p.soil_fungi/clustered/otus_R1.fasta -db /home/aublxr001/p.soil_fungi/db/sh_general_release_dynamic_10.05.2021_newsequenceheaders_SynMock.fasta -tabbedout /home/aublxr001/p.soil_fungi/taxonomy/fungi_R1_UNITE.txt -strand both -sintax_cutoff 0.8
+
+
+
+/home/aublxr001/p.soil_fungi/db
+
+
+
+
