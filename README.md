@@ -7,7 +7,7 @@ Hello, here we work with peanut soil obtained from the Wiregrass Research and Ex
 
 # Pipeline
 
-for these first few steps we used the *Albama Super Computer* proved by Auburn University
+For these first few steps we used the *Albama Super Computer* proved by Auburn University
 
 ## Striping primers
 
