@@ -1,0 +1,718 @@
+---
+title: "R Notebook"
+author: "Laura Rodriguez"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Peanut soil microbiome : Fungi
+# soil collected from: Wiregrass Research and Extension Center
+## data collected: 2021
+#
+#
+
+
+
+## Load packages and dependencies
+```{r}
+library(phyloseq)
+library(decontam)
+library(reltools)
+library(minpack.lm)
+library(devtools)
+library(tyRa)
+library(Hmisc)
+library(Biostrings)
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+library(vegan)
+library(ggpubr)
+library(readxl)
+library(tibble)
+library(ggtext)
+library(RColorBrewer)
+library(microbiome)
+```
+## Color palette
+```{r}
+cbbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+fungi.colors <- c("#c6dbef","#9ecae1","#6baed6","#3182bd","#08519c",
+                           "#c7e9c0", "#a1d99b", "#74c476", "#41ab5d", "#238b45", "#005a32",
+                           "#fdd0a2", "#fdae6b", "#fd8d3c", "#f16913", "#d94801", "#8c2d04",
+                           "#dadaeb", "#bcbddc", "#9e9ac8", "#807dba", "#6a51a3", "#4a1486",
+                           "#fcbba1", "#fc9272", "#fb6a4a", "#ef3b2c", "#cb181d", "#99000d",
+                           "#d9d9d9", "#bdbdbd", "#969696", "#737373", "#525252", "#252525")
+```
+
+# Loading data: metadata, OTU table, taxonomy
+```{r}
+#metadata
+samp_dat_fungi <- read.csv("/Users/lau/Desktop/PLPA6820/2023.02.26Gittor/phyloseq_input/metadata_libr.prepall02.01.22.csv", na.strings = "NA")
+
+rownames(samp_dat_fungi) <- samp_dat_fungi$Sample #row names must match OTU table headers to be able to be readed
+SAMP.fungi <- phyloseq::sample_data(samp_dat_fungi)
+
+# OTU table 
+otu_fungi <- read.csv("/Users/lau/Desktop/PLPA6820/2023.02.26Gittor/phyloseq_input/otu_table_ITS_UNOISE_R1.csv")
+rownames(otu_fungi) <- otu_fungi$OTU
+otu_fungi <- otu_fungi[,-1]
+OTU.fungi <- phyloseq::otu_table(otu_fungi, taxa_are_rows = TRUE)
+
+colnames(otu_fungi)
+
+# Taxonomy
+unite_taxonomy <-read.csv("/Users/lau/Desktop/PLPA6820/2023.02.26Gittor/phyloseq_input/taxfungi_R1_UNITE.csv",
+           header = TRUE,
+           row.names = 1)
+
+```
+
+## Discard "unidentified" in the unite_taxonomy from kingdom and select only Kingdom fungi
+### We also filter the mock community 
+```{r}
+any(unite_taxonomy$Kingdom == "unidentified")
+nrow(unite_taxonomy[unite_taxonomy$Kingdom == "unidentified", ])
+unite_taxonomy[unite_taxonomy$Kingdom == "unidentified", ]
+
+unite_taxonomy %>% dplyr::filter(unite_taxonomy$Kingdom == "unidentified")
+unite_taxonomy <- subset(unite_taxonomy, Kingdom %in% c("Fungi", "Mocki"))
+
+dim(unite_taxonomy)
+
+# Removing bacteria and other non-target taxa ----------------------------------------------------------------------------
+head(unite_taxonomy)
+levels(as.factor(unite_taxonomy$Kingdom))
+levels(as.factor(unite_taxonomy$Class))
+unite_taxonomy$OTU <- rownames(unite_taxonomy)
+
+TAX.fungi.unite <- phyloseq::tax_table(as.matrix(unite_taxonomy))
+```
+
+## Load fasta & phyloseq object
+```{r}
+FASTA.fungi <- readDNAStringSet("/Users/lau/Desktop/PLPA6820/2023.02.26Gittor/phyloseq_input/otus_R1.fasta", seek.first.rec=TRUE, use.names=TRUE)
+
+physeq_fungi_nonfilt <- phyloseq::phyloseq(OTU.fungi, TAX.fungi.unite, FASTA.fungi, SAMP.fungi)
+
+```
+
+## Decontaminate
+```{r}
+#this will decontaminate the data by comparing to those microbes also found in the control control samples
+physeq_fungi_nonfilt@sam_data$Sample_or_Control <- ifelse(physeq_fungi_nonfilt@sam_data$Isolate.Code %in% c("NEC", "NCP"), "Control Sample", "True Sample")
+sample_data(physeq_fungi_nonfilt)$is.neg <- sample_data(physeq_fungi_nonfilt)$Sample_or_Control == "Control Sample"
+contamdf.prev <- isContaminant(physeq_fungi_nonfilt, method="prevalence", neg="is.neg", threshold = 0.1, normalize = TRUE)
+badTaxa <- rownames(contamdf.prev[contamdf.prev$contaminant == TRUE,])
+
+print(badTaxa)
+
+ps.pa <- transform_sample_counts(physeq_fungi_nonfilt, function(abund) 1*(abund>0))
+ps.pa.neg <- prune_samples(sample_data(ps.pa)$Sample_or_Control == "Control Sample", ps.pa)
+ps.pa.pos <- prune_samples(sample_data(ps.pa)$Sample_or_Control == "True Sample", ps.pa)
+# Make data.frame of prevalence in positive and negative samples
+df.pa <- data.frame(pa.pos=taxa_sums(ps.pa.pos), pa.neg=taxa_sums(ps.pa.neg),
+                    contaminant=contamdf.prev$contaminant)
+#chart name decontaminate
+ggplot(data=df.pa, aes(x=pa.neg, y=pa.pos, color=contaminant)) + geom_point() +
+  xlab("Prevalence (Negative Controls)") + ylab("Prevalence (True Samples)")
+
+goodTaxa <- setdiff(taxa_names(physeq_fungi_nonfilt), badTaxa)
+fungi_sub_no_bad <- prune_taxa(goodTaxa, physeq_fungi_nonfilt)
+
+# analyse the positive controls Mock sequences
+```
+
+## Sanity check, here we make sure that the OTUs we have are fungi 
+```{r}
+# Sanity check - we only want OTUs that are Fungi
+unique(fungi_sub_no_bad@tax_table@.Data[,1])# We only want Kingdom Fungi
+
+fungi.obj1 <- fungi_sub_no_bad %>% 
+  subset_taxa(Kingdom == "Fungi") %>%
+  subset_samples(!Isolate.Code %in% c("NEC", "NCP", "PC")) %>%
+  phyloseq::filter_taxa(function(x) sum(x) > 0, TRUE) # remove taxa with zero reads (i.e., those not present in objective 1)
+
+unique(fungi.obj1@tax_table@.Data[,1])# We only want Kingdom Fungi
+
+sort(data.frame(sample_sums(fungi.obj1))[,1], decreasing = TRUE)
+```
+
+## Filter and discard all samples with less than 5000 reads
+```{r}
+# we are going to trash all the samples below 5,000. to make sure we take the best samples.
+## FILTER OUT SAMPLES BELOW 5000 reads
+fungi.obj1_5000reads <- prune_samples(sample_sums(fungi.obj1) > 5000, fungi.obj1) %>%
+  phyloseq::filter_taxa(function(x) sum(x) > 0, TRUE)
+```
+
+# Reads obtained
+```{r}
+sum(taxa_sums(fungi.obj1_5000reads)) # 22,957,826
+#Final total for fungi - 22,957,826 reads across 298 (you got this number from:"fungi.obj1_5000reads") samples 
+
+mean(sample_sums(fungi.obj1_5000reads)) # 77,039
+median(sample_sums(fungi.obj1_5000reads)) # 72,526
+```
+
+## We can use this function to save everything we run up-till now
+```{r}
+# Save an object to a file
+saveRDS(fungi.obj1_5000reads, file = "Fungi_peanut_soil_nonorm_041723.rds")
+```
+## Restore the object you can start from here!!
+```{r}
+# Restore the object. you can start from here!!
+fungi.no.norm <- readRDS(file = "Fungi_peanut_soil_nonorm_041723.rds")
+```
+
+## Rarefaction analysis
+### -Rarefaction is a technique to assess species richness from the results of sampling. 
+### -Thus, allows the calculation of species richness for a given number of individual samples by using the rarefaction curve 
+### -Rarefaction curve is a plot of the number of species as a function of the number of samples. 
+### -Rarefaction curves generally grow rapidly at first, as the most common species are found, but the curves plateau as only the rarest species remain to be sampled.
+```{r}
+## Rarefaction analysis
+sam.data <- data.frame(fungi.no.norm@sam_data)
+fOTU.table <- fungi.no.norm@otu_table
+S <- specnumber(t(fOTU.table)) # observed number of species
+raremax <- min(rowSums(t(fOTU.table)))
+Srare <- rarefy(t(fOTU.table), raremax)
+#chart name rarefaction_1
+plot(S, Srare, xlab = "Observed No. of Species", ylab = "Rarefied No. of Species")
+abline(0, 1)
+rare.fun <- rarecurve(t(fOTU.table), step = 1000, sample = raremax, col = "blue", cex = 0.6)
+fungi.rare.curve.extract <- NULL
+for(i in 1:length(rare.fun)){
+  sample.200 <- data.frame(rare.spec = rare.fun[[i]])
+  sample.200$read_depth <- attr(rare.fun[[i]], "Subsample")
+  sample.200$Sample <- rownames(t(fOTU.table[,i]))
+  fungi.rare.curve.extract <- rbind.data.frame(fungi.rare.curve.extract, sample.200)
+}
+fungi.rare.curve.extract2 <- left_join(sam.data, fungi.rare.curve.extract, by = "Sample")
+
+fungi.rare <- ggplot(fungi.rare.curve.extract2, aes(x = read_depth, y = rare.spec, group = Sample)) + 
+  #geom_point() +
+  geom_line() + 
+  xlab("Reads") + 
+  ylab("Number of OTUs") + 
+  theme_classic() + 
+  geom_vline(xintercept = 72526, linetype = "dashed") +
+  ggtitle("Fungi") 
+fungi.rare
+```
+
+
+## Normalize based on cumulative sum scaling & phyloseq object
+```{r}
+MGS <- phyloseq_to_metagenomeSeq(fungi.no.norm)
+p <- metagenomeSeq::cumNormStatFast(MGS)
+MGS <- metagenomeSeq::cumNorm(MGS, p =p)
+metagenomeSeq::normFactors(MGS) # exports the normalized factors for each sample
+norm.fungi <- metagenomeSeq::MRcounts(MGS, norm = T)
+norm.fungi.OTU <- phyloseq::otu_table(norm.fungi, taxa_are_rows = TRUE)
+
+fungi.css.norm <- phyloseq::phyloseq(norm.fungi.OTU, TAX.fungi.unite, FASTA.fungi, SAMP.fungi)
+```
+
+## We save again. 
+```{r}
+## fungi CSS NORM RDS
+#SAVE the fungi phyloseq object as an RDS file to load faster in future.
+# Save an object to a file
+saveRDS(fungi.css.norm, file = "Fungi_peanut_soil_CSS_041723.rds")
+```
+## Now we don't have to run above, we would just have to run this and continue from here!
+```{r}
+# Restore the object
+fungi.css.norm <- readRDS(file = "Fungi_peanut_soil_CSS_041723.rds")
+```
+
+
+## Beta diveristy (Sample dissimilarity)
+### Bray-curtis distance matrix (Principal Coordinate analysis "PCoA")
+```{r}
+# Beta diversity 
+fungi.dist.bray = phyloseq::distance(fungi.css.norm, "bray") # create bray-curtis distance matrix
+fungi.ord <- ordinate(fungi.css.norm, "PCoA", "bray")
+global.nmds <- plot_ordination(fungi.css.norm, ordination = fungi.ord, type = "samples") 
+global.nmds.data <- global.nmds$data
+#takes a long time to run
+adonis2(fungi.dist.bray~Soil*as.factor(week)*as.factor(Treatment), as(sample_data(fungi.css.norm), "data.frame"), permutations = 9999) 
+
+#beta diversity plot: Principal coordinate chart
+ggplot() + 
+  geom_point(data = global.nmds.data, aes(x = Axis.1, y = Axis.2, shape = as.factor(Treatment), fill = as.factor(week)), alpha = 0.8, size = 2) +
+  theme_bw() +
+  ylab("PCoA2") + 
+  xlab("PCoA1") +
+  scale_fill_manual(values=cbbPalette) +
+  stat_ellipse(data = global.nmds.data, aes(x = Axis.1, y = Axis.2, group = Soil), type = "norm", linetype = 2) +
+  scale_shape_manual(values=c(21, 22, 23, 24, 25)) +
+  guides(fill=guide_legend(override.aes=list(shape=21))) 
+
+```
+
+
+## Relative abundance *Aspergillus flavus*
+### -Shannon test
+### -Simpson test
+### Then we did Relative abundance of *A. flavus* and a grapth that depicts how *A. falvus* relative abundance move through the weeks. It is actually pretty low abundance but we have some spikes, we do not have an explanation, but if we take it out the outlier visibly will be better.
+Some work with *Aspergillus flavus*:
+-we sub-set for this specie to obtain richness that is the number of *A. flavus* in the soil we sampled and we plot it (basically compare)
+-Shannon test
+-Simpson test
+result:
+phyloseq-class experiment-level object
+otu_table()   OTU Table:         [ 5 taxa and 298 samples ]
+sample_data() Sample Data:       [ 298 samples by 23 sample variables ]
+tax_table()   Taxonomy Table:    [ 5 taxa by 8 taxonomic ranks ]
+refseq()      DNAStringSet:      [ 5 reference sequences ]
+```{r}
+#sub-set A. flavus
+aspergillus <- fungi.no.norm %>% subset_taxa(Species == "Aspergillus_flavus")
+#compare aspergillus by Alpha diversity = richness (# of species in area)
+# alpha diversity is the mean species diversity in a site at a local scale#
+fungi.no.norm@sam_data$shannon <- estimate_richness(fungi.no.norm, measures=c("Shannon"))$Shannon
+fungi.no.norm@sam_data$chao <- estimate_richness(fungi.no.norm, measures=c("Chao1"))$Chao1
+fungi.no.norm@sam_data$invsimpson <- estimate_richness(fungi.no.norm, measures=c("InvSimpson"))$InvSimpson
+fungi.no.norm@sam_data$sequence_depth <- as.numeric(sample_sums(fungi.no.norm))
+fungi.no.norm@sam_data$richness <- estimate_richness(fungi.no.norm, measures=c("Observed"))$Observed
+fungi.no.norm@sam_data$even <- fungi.no.norm@sam_data$shannon/log(fungi.no.norm@sam_data$richness)
+
+  #Relative abundance Aspergillus flavus
+  A.flavusrelativeabundance <- fungi.no.norm %>% 
+    transform_sample_counts(function(x) x / sum(x) ) %>%
+    psmelt()%>%
+    subset(Species == "Aspergillus_flavus")
+  
+  ggplot(A.flavusrelativeabundance[A.flavusrelativeabundance$Abundance < 0.04,], aes(x = as.factor(week), y = Abundance, color = as.factor(Treatment))) + 
+  stat_summary(fun.y=mean,geom="line", aes(group = Treatment)) + 
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2) +
+  #geom_jitter()+
+  theme_classic() +
+  ylab("Relative Abundance (%)") +
+  xlab("") +
+  scale_color_manual(values = cbbPalette) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(fill = "Treatment") +
+  theme(legend.text = element_text(size = 10),
+        legend.key = element_blank(),
+        legend.title = element_text(size = 10),
+        legend.position = "right", 
+        strip.text.x = element_text(size = 10, vjust=2),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  facet_wrap(~Soil, scales = "free")
+```
+
+### THIS IS WRONG, LEARN FROM IT!
+### this plot looks really good but is wrong because is stacking the abundance and suming it so is not really relative abundance. That's why the y values are so high. Keep in mind.
+```{r}
+ggplot(A.flavusrelativeabundance, aes(x = as.factor(week), y = Abundance, fill = as.factor(Treatment))) + 
+  #facet_wrap(~week, nrow = 1, scales = "free_x", strip.position="bottom") +
+  geom_bar(stat = "identity", alpha = 0.9) +
+  theme_minimal() +
+  ylab("Relative Abundance (%)") +
+  xlab("") +
+  scale_fill_manual(values = sample(fungi.colors)) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(fill = "Treatment") +
+  theme(axis.text.x = element_blank(),
+        legend.text = element_text(size = 10),
+        legend.key = element_blank(),
+        legend.title = element_text(size = 10),
+        legend.position = "right", 
+        strip.text.x = element_text(size = 10, vjust=2),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+```
+
+## Top 20 fungi prevalent peanut soils
+We filter for soil A and soil B. Verify they have the same 20 prevalent fungi (is it weird knowing the soils were really different in the Principal coordinate chart)
+```{r}
+set.seed(12348)
+topx.fungi <- top_taxa(fungi.no.norm, n = 20) 
+fung.composition <- fungi.no.norm %>%   
+  subset_taxa(OTU %in% topx.fungi) %>%   
+  microbiome::transform("compositional") %>%  
+  psmelt() %>%   
+  group_by(Treatment, Soil, Label) %>%   
+  summarise(MeanRelAbund = mean(Abundance)) %>%  
+  left_join(as.data.frame(tax_table(fungi.no.norm), by = "Label")) %>%   
+  ggplot(aes(Treatment, MeanRelAbund, fill = Label)) +   
+  geom_bar(stat = "identity") +   
+  theme_classic() +   
+  scale_fill_manual(values= c(cbbPalette, fungi.colors)) +   
+  scale_y_continuous(labels = scales::percent) +   
+  labs(x = "", y = "Relative abundance (%)",        title = "Fungi") +   
+  theme(axis.text.x = element_text(angle=45, hjust=1),        
+        legend.text = element_text(face = "italic", size = 5),        
+        legend.title = element_blank(),         
+        legend.key.size = unit(0.3, 'cm')) 
+  #facet_wrap(~Soil, nrow = 1) 
+fung.composition
+```
+
+## Top 20 fungi prevalent in both peanut soils
+This is to verify if running them separated would change the OTUs
+```{r}
+
+fungi.no.norm.A <- fungi.no.norm %>%
+  subset_samples(Soil == "A") %>%
+  phyloseq::filter_taxa(function(x) sum(x) > 0, TRUE) 
+#soil A
+set.seed(12348)
+topx.fungi.A <- top_taxa(fungi.no.norm.A, n = 20)
+fungi.composition.A <- fungi.no.norm %>% 
+  subset_taxa(OTU %in% topx.fungi) %>% 
+  microbiome::transform("compositional") %>%  
+  psmelt() %>%  
+  group_by(Treatment, Label) %>%   
+  summarise(MeanRelAbund = mean(Abundance)) %>%  
+  left_join(as.data.frame(tax_table(fungi.no.norm), by = "Label")) %>%   
+  ggplot(aes(Treatment, MeanRelAbund, fill = Label)) +   
+  geom_bar(stat = "identity") +   
+  theme_classic() +   
+  scale_fill_manual(values= c(cbbPalette, fungi.colors)) +   
+  scale_y_continuous(labels = scales::percent) +   
+  labs(x = "", y = "Relative abundance (%)",        title = "Fungi") +   
+  theme(axis.text.x = element_text(angle=45, hjust=1),        
+        legend.text = element_text(face = "italic", size = 5),        
+        legend.title = element_blank(),         
+        legend.key.size = unit(0.3, 'cm'))  
+#facet_wrap(~Soil, nrow = 1) 
+fungi.composition.A
+
+fungi.no.norm.B <- fungi.no.norm %>%
+  subset_samples(Soil == "B") %>%
+  phyloseq::filter_taxa(function(x) sum(x) > 0, TRUE) 
+#Filter for soil B
+set.seed(12348)
+topx.fungi.B <- top_taxa(fungi.no.norm.B, n = 20)
+fungi.composition.B <- fungi.no.norm %>% 
+  subset_taxa(OTU %in% topx.fungi) %>% 
+  microbiome::transform("compositional") %>%  
+  psmelt() %>%  
+  #filter(Soil == "A") %>%
+  group_by(Treatment, Label) %>%   
+  summarise(MeanRelAbund = mean(Abundance)) %>%  
+  left_join(as.data.frame(tax_table(fungi.no.norm), by = "Label")) %>%   
+  ggplot(aes(Treatment, MeanRelAbund, fill = Label)) +   
+  geom_bar(stat = "identity") +   
+  theme_classic() +   
+  scale_fill_manual(values= c(cbbPalette, fungi.colors)) +   
+  scale_y_continuous(labels = scales::percent) +   
+  labs(x = "", y = "Relative abundance (%)",        title = "Fungi") +   
+  theme(axis.text.x = element_text(angle=45, hjust=1),        
+        legend.text = element_text(face = "italic", size = 5),        
+        legend.title = element_blank(),         
+        legend.key.size = unit(0.3, 'cm'))  
+#facet_wrap(~Soil, nrow = 1) 
+fungi.composition.B
+
+
+ggarrange(fungi.composition.A, fungi.composition.B, common.legend = T, labels = c("A", "B"))
+
+```
+
+
+
+## Relative abundance of *Mortierella* species
+
+```{r}
+#Relative abundance for Mortierella
+#the fungi.no.norm is a phyloseq object, we need to transformed the data to relative abundance(because that's what we want for our project),
+#then transform it to a data frame using psmelt(), with this, then, you can subset to A. flavus using subset(Species == "Aspergillus_flavus")
+#1. you can not use the fungi.no.norm bc is not normalized, before transforming it to a data frame, do relative abundance.
+mortierellaabundance <- fungi.no.norm %>% 
+  #transforme into the relative abundance
+  transform_sample_counts(function(x) x / sum(x) ) %>%
+  #now you have relative abundance! but still in phyloseq, so, transform by usinh psmelt(). The output will be a data frame.
+  #psmelt transform phyloseq to data frame
+  psmelt()%>%
+  #sub-set to aspergillus
+  subset(Family == "Mortierellaceae")
+
+#line chart
+ggplot(mortierellaabundance[mortierellaabundance$Abundance < 0.04,], aes(x = as.factor(week), y = Abundance, color = as.factor(Treatment))) + 
+  stat_summary(fun.y=mean,geom="line", aes(group = Treatment)) + 
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2) +
+  #geom_jitter()+
+  theme_classic() +
+  ylab("Relative Abundance (%)") +
+  xlab("") +
+  scale_color_manual(values = cbbPalette) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(fill = "Treatment") +
+  theme(legend.text = element_text(size = 10),
+        legend.key = element_blank(),
+        legend.title = element_text(size = 10),
+        legend.position = "right", 
+        strip.text.x = element_text(size = 10, vjust=2),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  facet_wrap(~Soil, scales = "free")
+```
+
+
+# Differential abundance analysis fungi
+```{r}
+# Perform indicator species analysis just considering the original groups
+set.seed(12348)
+indicator.management <- indicspecies::multipatt(as.data.frame(t(fungi.css.norm@otu_table)), cluster = fungi.css.norm@sam_data$Treatment, max.order = 1)
+
+# summary of results
+summary(indicator.management, indvalcomp = TRUE)
+unite_taxonomy$OTU <- rownames(unite_taxonomy)
+unite_taxonomy[unite_taxonomy$OTU == "BOTU_1527",]
+# Explore some of these taxa, what are they? What might they do?
+
+indicator.treatment <- indicator.management$sign
+indicator.treatment2 <- indicator.treatment %>%
+  subset(p.value < 0.01) %>%
+  mutate(OTU = rownames(.))
+
+indicator.treatment3 <- left_join(indicator.treatment2, unite_taxonomy, by = "OTU") 
+indicator.treatment3$category <- ifelse(indicator.treatment3$index == 1, "Dry1", 
+                                        ifelse(indicator.treatment3$index == 2, "Moderate2",
+                                               ifelse(indicator.treatment3$index == 3, "Moderate3",
+                                                      ifelse(indicator.treatment3$index == 4, "Moderate4",
+                                                             ifelse(indicator.treatment3$index == 5, "Wet5", NA)))))
+
+indicator.treatment4 <- indicator.treatment3 %>% 
+  count(OTU) 
+#indicator.treatment4$Phylum_other <- ifelse(indicator.treatment4$n < 10, "Other", indicator.treatment4$Phylum)  
+
+indicator.treatment5 <- left_join(indicator.treatment3, indicator.treatment4, by = "OTU")
+
+ q<- ggplot(indicator.treatment3, aes(x = category, fill = Label)) +
+  geom_bar(position = "stack") +
+  scale_fill_manual(values = c(cbbPalette, "purple", "brown", "grey", "pink", "red", "blue", "green", "cyan", "gold")) +
+  theme_classic() +
+  xlab("")
+   #facet_wrap(~Soil, scales = "free")
+  q + theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
+
+## Core microbiome fungi 
+```{r}
+fungi.no.norm@sam_data$Sample
+
+map <- fungi.no.norm@sam_data %>%
+  as("data.frame")
+# Core - abundance occupancy modeling- Peanut
+core.prioritizing <- function(phyloseq.object){
+  
+  set.seed(19)
+  rare.phyloseq.object <- rarefy_even_depth(phyloseq.object, replace=TRUE)
+  
+  nReads=sample_sums(rare.phyloseq.object)[[1]]            # input dataset needs to be rarified and the rarifaction depth included
+  otu <- rare.phyloseq.object@otu_table %>%
+    as("matrix")
+  map <- rare.phyloseq.object@sam_data %>%
+    as("data.frame")
+  
+  otu_PA <- 1*((otu>0)==1)                                               # presence-absence data
+  otu_occ <- rowSums(otu_PA)/ncol(otu_PA)                                # occupancy calculation
+  otu_rel <- apply(decostand(otu, method="total", MARGIN=2),1, mean)     # mean relative abundance
+  occ_abun <- add_rownames(as.data.frame(cbind(otu_occ, otu_rel)),'otu') # combining occupancy and abundance data frame
+  
+  # Ranking OTUs based on their occupancy
+  # For caluclating raking index we included following conditions:
+  #   - time-specific occupancy (sumF) = frequency of detection within time point (genotype or site)
+  #   - replication consistency (sumG) = has occupancy of 1 in at least one time point (genotype or site) (1 if occupancy 1, else 0)
+  
+  PresenceSum <- data.frame(otu = as.factor(row.names(otu)), otu) %>%
+    gather(Sample, abun, -otu) %>%
+    left_join(map, by = 'Sample') %>% #edit for sample id column in metadata
+    group_by(otu, week) %>% #edit for time point column in metadata
+    dplyr::summarise(time_freq=sum(abun>0)/length(abun),            # frequency of detection between time points
+                     coreTime=ifelse(time_freq == 1, 1, 0)) %>%     # 1 only if occupancy 1 with specific time, 0 if not
+    group_by(otu) %>%
+    dplyr::summarise(sumF=sum(time_freq),
+                     sumG=sum(coreTime),
+                     nS=length(week)*2,  #edit for time point column in metadata        
+                     Index=(sumF+sumG)/nS)                 # calculating weighting Index based on number of time points detected and
+  
+  otu_ranked <- occ_abun %>%
+    left_join(PresenceSum, by='otu') %>%
+    transmute(otu=otu,
+              rank=Index) %>%
+    arrange(desc(rank))
+  
+  # Calculating the contribution of ranked OTUs to the BC similarity
+  BCaddition <- NULL
+  
+  # calculating BC dissimilarity based on the 1st ranked OTU
+  # with 36 samples there should be 630 combinations n!/r!
+  otu_start=otu_ranked$otu[1]                  
+  start_matrix <- as.matrix(otu[otu_start,])
+  start_matrix <- t(start_matrix)
+  x <- apply(combn(ncol(start_matrix), 2), 2, function(x) sum(abs(start_matrix[,x[1]]- start_matrix[,x[2]]))/(2*nReads))
+  x_names <- apply(combn(ncol(start_matrix), 2), 2, function(x) paste(colnames(start_matrix)[x], collapse=' - '))
+  df_s <- data.frame(x_names,x)
+  df_s$rank_count <- 1
+  BCaddition <- rbind(BCaddition,df_s)
+  # calculating BC dissimilarity based on additon of ranked OTUs from 2nd to 500th. Can be set to the entire length of OTUs in the dataset, however it might take some time if more than 5000 OTUs are included.
+  for(i in 2:500){                              
+    otu_add=otu_ranked$otu[i]                      
+    add_matrix <- as.matrix(otu[otu_add,])
+    add_matrix <- t(add_matrix)
+    start_matrix <- rbind(start_matrix, add_matrix)
+    x <- apply(combn(ncol(start_matrix), 2), 2, function(x) sum(abs(start_matrix[,x[1]]-start_matrix[,x[2]]))/(2*nReads))
+    #x_names <- apply(combn(ncol(start_matrix), 2), 2, function(x) paste(colnames(start_matrix)[x], collapse=' - '))
+    df_a <- data.frame(x_names,x)
+    df_a$rank_count <- i 
+    BCaddition <- rbind.data.frame(BCaddition, df_a)
+  }
+  # calculating the BC dissimilarity of the whole dataset (not needed if the second loop is already including all OTUs)
+  x <-  apply(combn(ncol(otu), 2), 2, function(x) sum(abs(otu[,x[1]]-otu[,x[2]]))/(2*nReads))  
+  x_names <- apply(combn(ncol(otu), 2), 2, function(x) paste(colnames(otu)[x], collapse=' - '))
+  df_full <- data.frame(x_names,x)
+  df_full$rank_count <- length(rownames(otu))
+  BCfull <- rbind.data.frame(BCaddition, df_full)
+  
+  BC_ranked <- BCfull %>%
+    group_by(rank_count) %>%
+    dplyr::summarise(MeanBC=mean(x)) %>%            # mean Bray-Curtis dissimilarity
+    arrange(desc(-MeanBC)) %>%
+    mutate(proportionBC=MeanBC/max(MeanBC))   # proportion of the dissimilarity explained by the n number of ranked OTUs
+  Increase=BC_ranked$MeanBC[-1]/BC_ranked$MeanBC[-length(BC_ranked$MeanBC)]
+  increaseDF <- data.frame(IncreaseBC=c(0,(Increase)), rank=factor(c(1:(length(Increase)+1))))
+  increaseDF$rank <- as.numeric(increaseDF$rank)
+  BC_ranked <- left_join(BC_ranked, increaseDF, by = c("rank_count" = "rank"))
+  BC_ranked <- BC_ranked[-nrow(BC_ranked),]
+  
+  #Creating threshold for core inclusion - last call method
+  
+  #B) Final increase in BC similarity of equal or greater then 2%
+  lastCall <- last(as.numeric(BC_ranked$rank_count[(BC_ranked$IncreaseBC>=1.02)]))
+  
+  #Creating plot of Bray-Curtis similarity
+  plot <- ggplot(BC_ranked[1:100,], aes(x=factor(BC_ranked$rank_count[1:100], levels=BC_ranked$rank_count[1:100]))) +
+    geom_point(aes(y=proportionBC)) +
+    theme_classic() + theme(strip.background = element_blank(),axis.text.x = element_text(size=7, angle=45)) +
+    geom_vline(xintercept=last(as.numeric(BC_ranked$rank_count[(BC_ranked$IncreaseBC>=1.02)])), lty=3, col='black', cex=.5) +
+    labs(x='ranked OTUs',y='Bray-Curtis similarity') +
+    annotate(geom="text", x=last(as.numeric(BC_ranked$rank[(BC_ranked$IncreaseBC>=1.02)]))+3, y=.5, label=paste("Last 2% increase (",last(as.numeric(BC_ranked$rank[(BC_ranked$IncreaseBC>=1.02)])),")",sep=''), color="black")
+  
+  core.otus.CSS.mean.T1 <- otu_ranked$otu[1:lastCall]
+  return_list <- list(core.otus.CSS.mean.T1, plot, otu_ranked, occ_abun)
+  return(return_list)
+}
+
+#Takes a long time
+fungi.core <- core.prioritizing(fungi.no.norm)
+```
+
+## Save it so we don't have to run such a long function
+```{r}
+saveRDS(fungi.core, file = "fungi.no.norm.core_check_point01.11.23.rds")
+```
+
+# Restore
+```{r}
+#Restore the object
+fungi.core <- readRDS(file = "fungi.no.norm.core_check_point01.11.23.rds")
+```
+
+## Core graph
+So, if this data I am using for the core does not include the soils, how can I include the soils that is not merge bc we have subseted a lot so I don't want to add everything here. I would like to have soils and do a ggarange of the core microbiome for both to see if anything stands out.
+```{r}
+fungi.core[[1]]
+
+library(tyRa)
+set.seed(19)
+rare.phyloseq.object <- rarefy_even_depth(fungi.no.norm, replace=TRUE)
+
+nReads=sample_sums(rare.phyloseq.object)[[1]]                                                                 # input dataset needs to be rarified and the rarifaction depth included 
+otu <- rare.phyloseq.object@otu_table %>%
+  as("matrix")
+taxa <- rownames(otu)
+map <- rare.phyloseq.object@sam_data %>%
+  as("data.frame")
+spp.out <- tyRa::fit_sncm(spp = t(otu), pool=NULL, taxon=taxa)
+
+predictions <- spp.out$predictions
+predictions$otu <- rownames(predictions)
+
+# Abundance-Occupancy
+taxonomy <- fungi.no.norm@tax_table %>%
+  as("matrix") %>%
+  as_tibble() %>%
+  mutate(otu = rownames(fungi.no.norm@tax_table))
+
+abund.occ3 <- left_join(taxonomy, predictions, by = "otu") 
+
+abund.occ3$core <- ifelse(abund.occ3$otu %in% fungi.core[[1]], "Core", "Not Core")
+
+library(ggrepel)
+
+core <- ggplot() +
+  geom_point(data = abund.occ3, aes(x = log10(p), y = freq, color = fit_class, shape = core), alpha = 0.8, size = 2) +
+  geom_line(color='black', data=abund.occ3, size=1, aes(y=abund.occ3$freq.pred, x=log10(abund.occ3$p)), alpha=.25) +
+  geom_line(color='black', lty='twodash', size=1, data=abund.occ3, aes(y=abund.occ3$pred.upr, x=log10(abund.occ3$p)), alpha=.25)+
+  geom_line(color='black', lty='twodash', size=1, data=abund.occ3, aes(y=abund.occ3$pred.lwr, x=log10(abund.occ3$p)), alpha=.25)+
+  labs(x="log10(Mean relative abundance)", y="Occupancy") + 
+  theme_classic() + 
+  scale_color_manual(values = c("#000000", "#E69F00", "#56B4E9")) +
+  geom_text_repel(data = abund.occ3[abund.occ3$core == "Core" & abund.occ3$fit_class == "Below prediction",], 
+                  aes(x = log10(p), y = freq, label = Label))
+plot(core)
+
+```
+
+
+## Load packages and dependencies
+```{r}
+library(gganimate)
+library(gganimate)
+library(ggplot2)
+library(gganimate)
+library('gifski')
+library('png')
+library(gapminder)
+library(plotly)
+library(transformr)
+library(gapminder)
+library(ggplot2)
+library(gganimate)
+library('gifski')
+library('png')
+```
+## Interactive core graph:
+```{r}
+coreInteractive <-ggplot() +
+  geom_point(data = abund.occ3, aes(x = log10(p), y = freq,  shape = core, color = fit_class, text = paste("Species:", Species)), alpha = 0.8, size = 1) +
+  #geom_point(aes(shape= "Species")) +
+  geom_line(color='black', data=abund.occ3, size=1, aes(y=abund.occ3$freq.pred, x=log10(abund.occ3$p)), alpha=.25) +
+  geom_line(color='black', lty='twodash', size=1, data=abund.occ3, aes(y=abund.occ3$pred.upr, x=log10(abund.occ3$p)), alpha=.25)+
+  geom_line(color='black', lty='twodash', size=1, data=abund.occ3, aes(y=abund.occ3$pred.lwr, x=log10(abund.occ3$p)), alpha=.25)+
+  labs(x="log10(Mean relative abundance)", y="Occupancy") + 
+  theme_classic() + 
+  scale_color_manual(values = c("#000000", "#E69F00", "#56B4E9")) +
+  geom_text_repel(data = abund.occ3[abund.occ3$core == "Core" & abund.occ3$fit_class == "Below prediction",], 
+                  aes(x = log10(p), y = freq, label = Label))
+ggplotly(coreInteractive)
+```
+
+
+
+## References
+https://journals.asm.org/doi/10.1128/mSystems.00363-21 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
