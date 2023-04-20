@@ -10,15 +10,25 @@ Hello, here we work with peanut soil obtained from the Wiregrass Research and Ex
 For these first few steps we used the *Albama Super Computer* proved by Auburn University
 
 ## [Striping primers](https://github.com/lauraRodriiguez/PLPA6820/blob/main/Scripts/STRIPPING%20PRIMERS1.rtf)
+Removal of primer form your sequences
 
 ## [Get stats](https://github.com/lauraRodriiguez/PLPA6820/blob/main/Scripts/Stats2.rtf)
+Filtering parameters
 
 ## [Filtering and trimming](https://github.com/lauraRodriiguez/PLPA6820/blob/main/Scripts/FILTERING.TRIMMING3.rtf)
+we used VSEARCH,the trimming and filtering of the sequences happened here based on the results we got in stats. In this step you can also run FASTQ to see the quality of your data
 
 ## [Dereplication, De-noising, Clustering](https://github.com/lauraRodriiguez/PLPA6820/blob/main/Scripts/DEREPLICATION%2C%20CLUSTERING.CHIMERAREMOVAL4.rtf)
+Dereplication: 
+De-noising: zOTUs
+Clustering: OTUs based on traditional 97% identity
 
 ## [Mapping](https://github.com/lauraRodriiguez/PLPA6820/blob/main/Scripts/MAPPING5.rtf)
+OTU table
+
 
 ## [Taxonomy](https://github.com/lauraRodriiguez/PLPA6820/blob/main/Scripts/TAXONOMY6.rtf)
+This will create the taxonomy to all filtered and trimmed sequences
 
 ## [R analysis](https://github.com/lauraRodriiguez/PLPA6820/blob/main/WRECpeanutSoilFungi.Rmd)
+More downstream analysis and for visualization. R packages mostly used were "phyloseq", "tyRa", "Biostrings", "ggplot2", "dplyr", "vegan".
