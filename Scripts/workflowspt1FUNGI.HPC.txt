@@ -1,4 +1,4 @@
-# STEP 1 - STRIPPING PRIMERS
+n# STEP 1 - STRIPPING PRIMERS
 
 #!/bin/bash -login
 

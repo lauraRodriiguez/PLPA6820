@@ -1,0 +1,39 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2706
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 STEP 1 - STRIPPING PRIMERS\
+\
+#!/bin/bash -login\
+\
+############################################\
+#     Bioinformatic pipeline     		   #\
+#     ITS amplicon sequences	           #\
+#		  PRIMER REMOVAL 				   #\
+############################################\
+\
+# running cutadapt in a loop \
+\
+# first need to generate a list of file names in a text file named samples.txt\
+#to be able to make add the names of the files inside the text file (samples.txt) need to be inside the directory of where the samples are and then make the "ls > samples.txt" and the names of all the samples should appear. If you do it outside of the directory where the samples are located need to add the path and then the carrot and the name of the text file. Example: ls path_to_where_the-samples_are_at > samples.txt. After doing this enter to the samples.txt using nano and erase anything that is not the names of the samples you are about to run, in my case I only erase the "sample.txt" found inside the samples.txt (it depends on what you have in that directory too).\
+# I did this by ls > samples.txt, then going to nano samples.txt to take out samples.txt\
+\
+#!/bin/bash\
+#\
+# load the module\
+module load anaconda/2-4.2.0_cent\
+for sample in $(cat samples.txt)\
+do\
+\
+    echo "On sample: $sample"\
+    \
+    cutadapt -a -g CTTGGTCATTTAGAGGAAGTAA \\\
+    -e 0.01 --discard-untrimmed --match-read-wildcards \\\
+    -o $\{sample\}*.fastq.gz \\\
+    $\{sample\} \\\
+    >> cutadapt_primer_trimming_stats.txt 2>&1\
+\
+done}
