@@ -36,3 +36,5 @@ This will create the taxonomy to all filtered and trimmed sequences
 
 ## [R analysis](https://github.com/lauraRodriiguez/PLPA6820/blob/main/WRECpeanutSoilFungi.Rmd)
 More downstream analysis and for visualization. R packages mostly used were "phyloseq", "tyRa", "Biostrings", "ggplot2", "dplyr", "vegan".
+-jk
+-jk
