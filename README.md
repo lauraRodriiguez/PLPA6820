@@ -19,7 +19,7 @@ Filtering parameters
 
 ## [Filtering and trimming](https://github.com/lauraRodriiguez/PLPA6820/blob/main/Scripts/FILTERING.TRIMMING3.rtf)
 
-we used VSEARCH,the trimming and filtering of the sequences happened here based on the results we got in stats. In this step you can also run FASTQ to see the quality of your data
+We used VSEARCH,the trimming and filtering of the sequences happened here based on the results we got in stats. In this step you can also run FASTQ to see the quality of your data
 
 ## [Dereplication, De-noising, Clustering](https://github.com/lauraRodriiguez/PLPA6820/blob/main/Scripts/DEREPLICATION%2C%20CLUSTERING.CHIMERAREMOVAL4.rtf)
 
