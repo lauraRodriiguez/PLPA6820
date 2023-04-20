@@ -11,14 +11,14 @@ For these first few steps we used the *Albama Super Computer* proved by Auburn U
 
 ## [Striping primers](https://github.com/lauraRodriiguez/PLPA6820/blob/main/Scripts/STRIPPING%20PRIMERS1.rtf)
 
-## Get stats
+## [Get stats](https://github.com/lauraRodriiguez/PLPA6820/blob/main/Scripts/Stats2.rtf)
 
-## Filtering and trimming
+## [Filtering and trimming](https://github.com/lauraRodriiguez/PLPA6820/blob/main/Scripts/FILTERING.TRIMMING3.rtf)
 
-## Dereplication, De-noising, Clustering
+## [Dereplication, De-noising, Clustering](https://github.com/lauraRodriiguez/PLPA6820/blob/main/Scripts/DEREPLICATION%2C%20CLUSTERING.CHIMERAREMOVAL4.rtf)
 
-## Mapping 
+## [Mapping](https://github.com/lauraRodriiguez/PLPA6820/blob/main/Scripts/MAPPING5.rtf)
 
-## Taxonomy
+## [Taxonomy](https://github.com/lauraRodriiguez/PLPA6820/blob/main/Scripts/TAXONOMY6.rtf)
 
-## R analysis
+## [R analysis](https://github.com/lauraRodriiguez/PLPA6820/blob/main/WRECpeanutSoilFungi.Rmd)
