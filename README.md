@@ -36,5 +36,16 @@ This will create the taxonomy to all filtered and trimmed sequences
 
 ## [R analysis](https://github.com/lauraRodriiguez/PLPA6820/blob/main/WRECpeanutSoilFungi.Rmd)
 More downstream analysis and for visualization. R packages mostly used were "phyloseq", "tyRa", "Biostrings", "ggplot2", "dplyr", "vegan".
-- jk
-- jk
+- Load packages, dependencies and palettes
+- Input metadata, OTUs, taxonomy, and fasta
+- Filter the "unidentified" form your taxonomy
+- Decontaminate data
+- Sanity check, making sure all the taxonomy is fungi
+- Filter and discard all samples with less than 5000 reads
+- Rarefaction analysis
+- Normalize the data
+- Beta diversity
+- Relative abundance *Aspergillus flavus*
+- Prevalent fungi in the soils
+- Differential abundance analysis
+- Core microbiome
