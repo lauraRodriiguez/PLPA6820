@@ -3,7 +3,7 @@ class : Principles and techniques of reproducible science
 
 # Fungal-Amplicon-Sequencing
 
-Hello, here we work with peanut soil obtained from the Wiregrass Research and Extension Center, for shorten WREC, located at Headland, Alabama. This soil was collected in June 2021. With the objective of observing changes in microbial communities under different water treatments for nine weeks in a control environment (growth chamber) samples were sequences at the end of 2021 and early 2022. This pipeline is focus on fungi but does not diverge as much, if you want to try bacterial sequences. 
+Hello, here we work with peanut soil obtained from the Wiregrass Research and Extension Center, for shorten WREC, located at Headland, Alabama. This soil was collected in June 2021. With the objective of observing changes in microbial communities under different water treatments for nine weeks in a control environment (growth chamber) samples were sequences at the end of 2021 and early 2022. This pipeline is focus on fungi but does not diverge as much, if you want to try bacterial sequences. Anyhow, in here we will use [Metadata](https://github.com/lauraRodriiguez/PLPA6820/blob/main/phyloseq_input/metadata_libr.prepall02.01.22.csv), [OTUs](https://github.com/lauraRodriiguez/PLPA6820/blob/main/phyloseq_input/otu_table_ITS_UNOISE_R1.csv), [Fasta](https://github.com/lauraRodriiguez/PLPA6820/blob/main/phyloseq_input/otus_R1.fasta), [Taxonomy](https://github.com/lauraRodriiguez/PLPA6820/blob/main/phyloseq_input/taxfungi_R1_UNITE.csv). Good Luck!
 
 # Pipeline
 
